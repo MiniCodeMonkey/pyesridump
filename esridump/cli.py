@@ -34,6 +34,8 @@ def _parse_args(args):
         help="Output file name (use - for stdout)")
     parser.add_argument("--proxy",
         help="Proxy string to send requests through ie: https://example.com/proxy.ashx?<SERVER>")
+    parser.add_argument("--http-proxy",
+        help="HTTP Proxy to send all requests through ie: http://my.proxy:8888")
     parser.add_argument("--jsonlines",
         action='store_true',
         default=False,
@@ -75,6 +77,10 @@ def _parse_args(args):
         type=int,
         default=1000,
         help="Maximum number of features to pull per batch, default 1000")
+    parser.add_argument("-s", "--sample",
+        type=int,
+        default=-1,
+        help="Limit number of features returned to this amount (only valid if --jsonlines is used)")
     parser.add_argument("--paginate-oid",
         dest='paginate_oid',
         action='store_true',
@@ -103,15 +109,21 @@ def main():
         fields=requested_fields,
         request_geometry=args.request_geometry,
         proxy=args.proxy,
+        http_proxy=args.http_proxy,
         timeout=args.timeout,
         max_page_size=args.max_page_size,
         parent_logger=logger,
         paginate_oid=args.paginate_oid)
 
+    features_count = 0
     if args.jsonlines:
         for feature in dumper:
+            features_count += 1
             args.outfile.write(json.dumps(feature))
             args.outfile.write('\n')
+
+            if args.sample > 0 and features_count >= args.sample:
+                break
     else:
         args.outfile.write('{"type":"FeatureCollection","features":[\n')
         feature_iter = iter(dumper)

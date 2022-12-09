@@ -12,7 +12,7 @@ class EsriDumper(object):
     def __init__(self, url, parent_logger=None,
                  extra_query_args=None, extra_headers=None,
                  timeout=None, fields=None, request_geometry=True,
-                 outSR=None, proxy=None,
+                 outSR=None, proxy=None, http_proxy=None,
                  start_with=None, geometry_precision=None,
                  paginate_oid=False,
                  max_page_size=None,
@@ -34,6 +34,14 @@ class EsriDumper(object):
         self._requests_to_pause = requests_to_pause
         self._num_of_retry = num_of_retry
 
+        if http_proxy:
+            self._requests_proxies = {
+                'http': http_proxy,
+                'https': http_proxy
+            }
+        else:
+            self._requests_proxies = None
+
         if parent_logger:
             self._logger = parent_logger.getChild('esridump')
         else:
@@ -50,10 +58,10 @@ class EsriDumper(object):
                     url += '?' + urlencode(params)
 
             self._logger.debug("%s %s, args %s", method, url, kwargs.get('params') or kwargs.get('data'))
-            return requests.request(method, url, timeout=self._http_timeout, **kwargs)
+            return requests.request(method, url, timeout=self._http_timeout, proxies=self._requests_proxies, **kwargs)
         except requests.exceptions.SSLError:
             self._logger.warning("Retrying %s without SSL verification", url)
-            return requests.request(method, url, timeout=self._http_timeout, verify=False, **kwargs)
+            return requests.request(method, url, timeout=self._http_timeout, proxies=self._requests_proxies, verify=False, **kwargs)
 
     def _build_url(self, url=None):
         return self._layer_url + url if url else self._layer_url
