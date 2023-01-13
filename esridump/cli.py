@@ -81,6 +81,11 @@ def _parse_args(args):
         type=int,
         default=-1,
         help="Limit number of features returned to this amount (only valid if --jsonlines is used)")
+    parser.add_argument("-c", "--resolve-coded-values",
+        dest='resolve_coded_values',
+        action='store_true',
+        default=False,
+        help="Replaces feature properties with coded values from the field when available")
     parser.add_argument("--paginate-oid",
         dest='paginate_oid',
         action='store_true',
@@ -113,7 +118,8 @@ def main():
         timeout=args.timeout,
         max_page_size=args.max_page_size,
         parent_logger=logger,
-        paginate_oid=args.paginate_oid)
+        paginate_oid=args.paginate_oid,
+        resolve_coded_values=args.resolve_coded_values)
 
     features_count = 0
     if args.jsonlines:

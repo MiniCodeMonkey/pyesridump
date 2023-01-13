@@ -1,6 +1,6 @@
 from itertools import tee
 
-def esri2geojson(esrijson_feature):
+def esri2geojson(esrijson_feature, codedFields=None):
     response = dict(type="Feature", geometry=None, properties=None)
 
     geojson_geometry = convert_esri_geometry(esrijson_feature.get('geometry'))
@@ -9,9 +9,22 @@ def esri2geojson(esrijson_feature):
 
     esri_attributes = esrijson_feature.get('attributes')
     if esri_attributes:
-        response['properties'] = esri_attributes
+        if codedFields:
+            response['properties'] = resolve_coded_values(esri_attributes, codedFields)
+        else:
+            response['properties'] = esri_attributes
 
     return response
+
+def resolve_coded_values(properties, fields):
+    for key, val in properties.items():
+        if key in fields:
+            if val in fields[key]:
+                val = fields[key][val]
+
+        properties[key] = val
+
+    return properties
 
 def convert_esri_geometry(esri_geometry):
     if esri_geometry is None:

@@ -15,6 +15,7 @@ class EsriDumper(object):
                  outSR=None, proxy=None, http_proxy=None,
                  start_with=None, geometry_precision=None,
                  paginate_oid=False,
+                 resolve_coded_values=False,
                  max_page_size=None,
                  pause_seconds=10, requests_to_pause=5, num_of_retry=5):
         self._layer_url = url
@@ -28,6 +29,7 @@ class EsriDumper(object):
         self._startWith = start_with or 0
         self._precision = geometry_precision or 7
         self._paginate_oid = paginate_oid
+        self._resolve_coded_values = resolve_coded_values
         self._max_page_size = max_page_size or 1000
 
         self._pause_seconds = pause_seconds
@@ -473,5 +475,27 @@ class EsriDumper(object):
 
             features = data.get('features')
 
+
+            codedFields = None
+            if self._resolve_coded_values:
+                codedFields = extractCodedValues(data.get('fields'))
+
             for feature in features:
-                yield esri2geojson(feature)
+                yield esri2geojson(feature, codedFields=codedFields)
+
+def extractCodedValues(fields):
+    codedValues = {}
+
+    for field in fields:
+        if field.get('domain') and field.get('domain').get('type') == "codedValue":
+            codedValues[field.get('name')] = convertCodedValuesToDict(field.get('domain').get('codedValues'))
+
+    return codedValues
+
+def convertCodedValuesToDict(values):
+    result = {}
+
+    for d in values:
+        result[d['code']] = d['name']
+
+    return result
