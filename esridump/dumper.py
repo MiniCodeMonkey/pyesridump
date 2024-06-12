@@ -8,6 +8,7 @@ from six.moves.urllib.parse import urlencode
 from esridump import esri2geojson
 from esridump.errors import EsriDownloadError
 
+
 class EsriDumper(object):
     def __init__(self, url, parent_logger=None,
                  extra_query_args=None, extra_headers=None,
@@ -17,7 +18,10 @@ class EsriDumper(object):
                  paginate_oid=False,
                  resolve_coded_values=False,
                  max_page_size=None,
-                 pause_seconds=10, requests_to_pause=5, num_of_retry=5):
+                 requests_to_pause=5,
+                 num_of_retry=5,
+                 pause_seconds=10,
+                 output_format='geojson'):
         self._layer_url = url
         self._query_params = extra_query_args or {}
         self._headers = extra_headers or {}
@@ -44,6 +48,11 @@ class EsriDumper(object):
         else:
             self._requests_proxies = None
 
+        if output_format not in ('geojson', 'esrijson'):
+            raise ValueError(f'Invalid output format. Expecting "geojson" or "esrijson", got {output_format}')
+
+        self._output_format = output_format
+
         if parent_logger:
             self._logger = parent_logger.getChild('esridump')
         else:
@@ -59,8 +68,9 @@ class EsriDumper(object):
                 if params:
                     url += '?' + urlencode(params)
 
-            self._logger.debug("%s %s, args %s", method, url, kwargs.get('params') or kwargs.get('data'))
-            return requests.request(method, url, timeout=self._http_timeout, proxies=self._requests_proxies, **kwargs)
+            self._logger.debug("%s %s, args %s", method, url,
+                               kwargs.get('params') or kwargs.get('data'))
+            return requests.request(method, url, timeout=self._http_timeout, **kwargs)
         except requests.exceptions.SSLError:
             self._logger.warning("Retrying %s without SSL verification", url)
             return requests.request(method, url, timeout=self._http_timeout, proxies=self._requests_proxies, verify=False, **kwargs)
@@ -135,15 +145,16 @@ class EsriDumper(object):
         })
         headers = self._build_headers()
         query_url = self._build_url('/query')
-        response = self._request('POST', query_url, headers=headers, data=check_args)
+        response = self._request(
+            'POST', query_url, headers=headers, data=check_args)
 
         try:
             data = response.json()
         except:
             self._logger.error("Could not parse response from pagination check %s as JSON:\n\n%s",
-                response.request.url,
-                response.text,
-            )
+                               response.request.url,
+                               response.text,
+                               )
             return False
 
         return data.get('error') and data['error']['message'] != "Failed to execute query."
@@ -154,8 +165,10 @@ class EsriDumper(object):
         })
         headers = self._build_headers()
         url = self._build_url()
-        response = self._request('GET', url, params=query_args, headers=headers)
-        metadata_json = self._handle_esri_errors(response, "Could not retrieve layer metadata")
+        response = self._request(
+            'GET', url, params=query_args, headers=headers)
+        metadata_json = self._handle_esri_errors(
+            response, "Could not retrieve layer metadata")
         return metadata_json
 
     def get_feature_count(self):
@@ -166,8 +179,10 @@ class EsriDumper(object):
         })
         headers = self._build_headers()
         url = self._build_url('/query')
-        response = self._request('GET', url, params=query_args, headers=headers)
-        count_json = self._handle_esri_errors(response, "Could not retrieve row count")
+        response = self._request(
+            'GET', url, params=query_args, headers=headers)
+        count_json = self._handle_esri_errors(
+            response, "Could not retrieve row count")
         count = count_json.get('count')
         if count is None:
             raise EsriDownloadError("Server doesn't support returnCountOnly")
@@ -179,6 +194,9 @@ class EsriDumper(object):
             for f in metadata['fields']:
                 if f.get('type') == 'esriFieldTypeOID':
                     oid_field_name = f['name']
+                elif f['name'].lower() == 'objectid':
+                    oid_field_name = f['name']
+                else:
                     break
 
         return oid_field_name
@@ -189,14 +207,18 @@ class EsriDumper(object):
             'f': 'json',
             'outFields': '',
             'outStatistics': json.dumps([
-                dict(statisticType='min', onStatisticField=oid_field_name, outStatisticFieldName='THE_MIN'),
-                dict(statisticType='max', onStatisticField=oid_field_name, outStatisticFieldName='THE_MAX'),
+                dict(statisticType='min', onStatisticField=oid_field_name,
+                     outStatisticFieldName='THE_MIN'),
+                dict(statisticType='max', onStatisticField=oid_field_name,
+                     outStatisticFieldName='THE_MAX'),
             ], separators=(',', ':'))
         })
         headers = self._build_headers()
         url = self._build_url('/query')
-        response = self._request('GET', url, params=query_args, headers=headers)
-        metadata = self._handle_esri_errors(response, "Could not retrieve min/max oid values")
+        response = self._request(
+            'GET', url, params=query_args, headers=headers)
+        metadata = self._handle_esri_errors(
+            response, "Could not retrieve min/max oid values")
 
         # Some servers (specifically version 10.11, it seems) will respond with SQL statements
         # for the attribute names rather than the requested field names, so pick the min and max
@@ -208,8 +230,10 @@ class EsriDumper(object):
             'f': 'json',
             'outFields': '*',
             'outStatistics': json.dumps([
-                dict(statisticType='min', onStatisticField=oid_field_name, outStatisticFieldName='THE_MIN'),
-                dict(statisticType='max', onStatisticField=oid_field_name, outStatisticFieldName='THE_MAX'),
+                dict(statisticType='min', onStatisticField=oid_field_name,
+                     outStatisticFieldName='THE_MIN'),
+                dict(statisticType='max', onStatisticField=oid_field_name,
+                     outStatisticFieldName='THE_MAX'),
             ], separators=(',', ':'))
         })
         query_args = self._build_query_args({
@@ -224,8 +248,10 @@ class EsriDumper(object):
         })
         headers = self._build_headers()
         url = self._build_url('/query')
-        response = self._request('GET', url, params=query_args, headers=headers)
-        oid_data = self._handle_esri_errors(response, "Could not check min/max values")
+        response = self._request(
+            'GET', url, params=query_args, headers=headers)
+        oid_data = self._handle_esri_errors(
+            response, "Could not check min/max values")
         if not oid_data or not oid_data.get('objectIds') or min_value not in oid_data['objectIds'] or max_value not in oid_data['objectIds']:
             raise EsriDownloadError('Server returned invalid min/max')
 
@@ -239,8 +265,10 @@ class EsriDumper(object):
         })
         url = self._build_url('/query')
         headers = self._build_headers()
-        response = self._request('GET', url, params=query_args, headers=headers)
-        oid_data = self._handle_esri_errors(response, "Could not retrieve object IDs")
+        response = self._request(
+            'GET', url, params=query_args, headers=headers)
+        oid_data = self._handle_esri_errors(
+            response, "Could not retrieve object IDs")
         oids = oid_data.get('objectIds')
         if not oids:
             raise EsriDownloadError("Server doesn't support returnIdsOnly")
@@ -260,8 +288,10 @@ class EsriDumper(object):
         })
         headers = self._build_headers()
         url = self._build_url('/query')
-        response = self._request('GET', url, params=query_args, headers=headers)
-        features = self._handle_esri_errors(response, "Could not retrieve a section of features")
+        response = self._request(
+            'GET', url, params=query_args, headers=headers)
+        features = self._handle_esri_errors(
+            response, "Could not retrieve a section of features")
         return features['features']
 
     def _split_envelope(self, envelope):
@@ -298,7 +328,8 @@ class EsriDumper(object):
         features = self._fetch_bounded_features(envelope, outSR)
 
         if len(features) >= max_records:
-            self._logger.info("Retrieved exactly the maximum record count. Splitting this box and retrieving the children.")
+            self._logger.info(
+                "Retrieved exactly the maximum record count. Splitting this box and retrieving the children.")
 
             envelopes = self._split_envelope(envelope)
 
@@ -312,7 +343,8 @@ class EsriDumper(object):
     def __iter__(self):
         query_fields = self._fields
         metadata = self.get_metadata()
-        page_size = min(self._max_page_size, metadata.get('maxRecordCount', 500))
+        page_size = min(self._max_page_size,
+                        metadata.get('maxRecordCount', 500))
         geometry_type = metadata.get('geometryType')
 
         row_count = None
@@ -329,15 +361,16 @@ class EsriDumper(object):
 
         page_args = []
 
-        if not self._paginate_oid and row_count is not None and (metadata.get('supportsPagination') or \
-                (metadata.get('advancedQueryCapabilities') and metadata['advancedQueryCapabilities']['supportsPagination'])):
+        if not self._paginate_oid and row_count is not None and (metadata.get('supportsPagination') or
+                                                                 (metadata.get('advancedQueryCapabilities') and metadata['advancedQueryCapabilities']['supportsPagination'])):
             # If the layer supports pagination, we can use resultOffset/resultRecordCount to paginate
 
             # There's a bug where some servers won't handle these queries in combination with a list of
             # fields specified. We'll make a single, 1 row query here to check if the server supports this
             # and switch to querying for all fields if specifying the fields fails.
             if query_fields and not self.can_handle_pagination(query_fields):
-                self._logger.info("Source does not support pagination with fields specified, so querying for all fields.")
+                self._logger.info(
+                    "Source does not support pagination with fields specified, so querying for all fields.")
                 query_fields = None
 
             for offset in range(self._startWith, row_count, page_size):
@@ -352,7 +385,8 @@ class EsriDumper(object):
                     'f': 'json',
                 })
                 page_args.append(query_args)
-            self._logger.info("Built %s requests using resultOffset method", len(page_args))
+            self._logger.info(
+                "Built %s requests using resultOffset method", len(page_args))
         else:
             # If not, we can still use the `where` argument to paginate
 
@@ -360,7 +394,8 @@ class EsriDumper(object):
             oid_field_name = self._find_oid_field_name(metadata)
 
             if not oid_field_name:
-                raise EsriDownloadError("Could not find object ID field name for deduplication")
+                raise EsriDownloadError(
+                    "Could not find object ID field name for deduplication")
 
             if metadata.get('supportsStatistics'):
                 # If the layer supports statistics, we can request maximum and minimum object ID
@@ -384,13 +419,15 @@ class EsriDumper(object):
                             'f': 'json',
                         })
                         page_args.append(query_args)
-                    self._logger.info("Built {} requests using OID where clause method".format(len(page_args)))
+                    self._logger.info(
+                        "Built {} requests using OID where clause method".format(len(page_args)))
 
                     # If we reach this point we don't need to fall through to enumerating all object IDs
                     # because the statistics method worked
                     use_oids = False
                 except EsriDownloadError:
-                    self._logger.exception("Finding max/min from statistics failed. Trying OID enumeration.")
+                    self._logger.exception(
+                        "Finding max/min from statistics failed. Trying OID enumeration.")
 
             if use_oids:
                 # If the layer does not support statistics, we can request
@@ -418,7 +455,8 @@ class EsriDumper(object):
                             'f': 'json',
                         })
                         page_args.append(query_args)
-                    self._logger.info("Built %s requests using OID enumeration method", len(page_args))
+                    self._logger.info(
+                        "Built %s requests using OID enumeration method", len(page_args))
                 except EsriDownloadError:
                     self._logger.info("Falling back to geo queries")
                     # Use geospatial queries when none of the ID-based methods will work
@@ -449,19 +487,24 @@ class EsriDumper(object):
                     # pause every number of "requests_to_pause", that increase the probability for server response
                     if query_index % self._requests_to_pause == 0:
                         time.sleep(self._pause_seconds)
-                        self._logger.info("pause for %s seconds", self._pause_seconds)
-                    response = self._request('POST', query_url, headers=headers, data=query_args)
-                    data = self._handle_esri_errors(response, "Could not retrieve this chunk of objects")
+                        self._logger.info(
+                            "pause for %s seconds", self._pause_seconds)
+                    response = self._request(
+                        'POST', query_url, headers=headers, data=query_args)
+                    data = self._handle_esri_errors(
+                        response, "Could not retrieve this chunk of objects")
                     # reset the exception state.
                     download_exception = None
                     # get out of retry loop, as the request succeeded
                     break
                 except socket.timeout as e:
-                    raise EsriDownloadError("Timeout when connecting to URL", e)
+                    raise EsriDownloadError(
+                        "Timeout when connecting to URL", e)
                 except ValueError as e:
                     raise EsriDownloadError("Could not parse JSON", e)
                 except Exception as e:
-                    download_exception = EsriDownloadError("Could not connect to URL", e)
+                    download_exception = EsriDownloadError(
+                        "Could not connect to URL", e)
                     # increase the pause time every retry, to increase the probability of fetching data successfully
                     time.sleep(self._pause_seconds * (retry + 1))
                     self._logger.info("retry pause {0}".format(retry))
@@ -471,7 +514,8 @@ class EsriDumper(object):
 
             error = data.get('error')
             if error:
-                raise EsriDownloadError("Problem querying ESRI dataset with args {}. Server said: {}".format(query_args, error['message']))
+                raise EsriDownloadError("Problem querying ESRI dataset with args {}. Server said: {}".format(
+                    query_args, error['message']))
 
             features = data.get('features')
 
@@ -483,19 +527,24 @@ class EsriDumper(object):
             for feature in features:
                 yield esri2geojson(feature, codedFields=codedFields)
 
-def extractCodedValues(fields):
-    codedValues = {}
+                if self._output_format == 'geojson':
+                    yield esri2geojson(feature)
+                else:
+                    yield feature
 
-    for field in fields:
-        if field.get('domain') and field.get('domain').get('type') == "codedValue":
-            codedValues[field.get('name')] = convertCodedValuesToDict(field.get('domain').get('codedValues'))
+    def extractCodedValues(fields):
+        codedValues = {}
 
-    return codedValues
+        for field in fields:
+            if field.get('domain') and field.get('domain').get('type') == "codedValue":
+                codedValues[field.get('name')] = convertCodedValuesToDict(field.get('domain').get('codedValues'))
 
-def convertCodedValuesToDict(values):
-    result = {}
+        return codedValues
 
-    for d in values:
-        result[d['code']] = d['name']
+    def convertCodedValuesToDict(values):
+        result = {}
 
-    return result
+        for d in values:
+            result[d['code']] = d['name']
+
+        return result

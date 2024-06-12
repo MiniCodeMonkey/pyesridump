@@ -91,6 +91,11 @@ def _parse_args(args):
         action='store_true',
         default=False,
         help="Turn on paginate by OID regardless of normal pagination support")
+    parser.add_argument("--output-format",
+        dest='output_format',
+        action='store',
+        default='geojson',
+        help="The JSON output format of the feature data")
 
     return parser.parse_args(args)
 
@@ -119,7 +124,8 @@ def main():
         max_page_size=args.max_page_size,
         parent_logger=logger,
         paginate_oid=args.paginate_oid,
-        resolve_coded_values=args.resolve_coded_values)
+        resolve_coded_values=args.resolve_coded_values,
+        output_format=args.output_format)
 
     features_count = 0
     if args.jsonlines:
